@@ -3,6 +3,10 @@
 from . import util
 from pprint import pprint
 import xmlrpc.client
+import datetime
+import pandas as pd
+#import pandas.io.formats.excel
+#from xlsxwriter import utility as xlsutil
 
 def get_sales_orders():
 
@@ -77,8 +81,42 @@ def export_sales_orders_2_csv():
 
     ## store as CSV
     data_dir = "./data"
+    now = datetime.datetime.now()
+    csv_filename = '{}/odoo-sales-order-detail--{}.csv'.format(data_dir, now.strftime("%Y-%m-%d-%H%M%S"))
     header = 'so_id,so_key,partner_id,partner_name,order_date,line_number,product_id,product_name,product_desc,quantity,price,subtotal,tax,total'
-    util.list_2_csv("{}/{}".format(data_dir, "odoo-sales-orders.csv"), records, header)
+    util.generate_csv_file(csv_filename, records, header)
+
+
+def export_sales_order_2_excel():
+
+    ## grab SO's from Odoo API
+    records = get_sales_orders()
+    header = 'so_id,so_key,partner_id,partner_name,order_date,line_number,product_id,product_name,product_desc,quantity,price,subtotal,tax,total'
+    col_names = header.split(",")
+
+    ## convert records to a dataframe
+    df_li = pd.DataFrame(data = records, columns = col_names)
+
+    ## aggregate orders by partner into a nw df
+    df_sales_orders = df_li.groupby(['partner_name', 'so_key']).apply(lambda row: pd.Series({'quantity': sum(row['quantity']), 'total': sum(row['total'])}))
+
+    # create list holding column display name, width, format (optional) and alignment for Excel column formatting
+    column_list = [
+        ['Partner Name', 30, None, 'left']
+        , ['Sales Order Key', 15, None, 'left']
+        , ['Total Qty', 20, '#,##0', 'right']
+        , ['Total Sales', 20, '#,##0.00', 'right']
+    ]
+
+    ## rename columns
+    df_sales_orders.index.names = [col[0] for col in column_list][0:2]
+    df_sales_orders.columns = [col[0] for col in column_list][2:4]
+
+    ## export to excel
+    data_dir = "./data"
+    now = datetime.datetime.now()
+    xls_filename = '{}/odoo-sales-by-partner-report--{}.xlsx'.format(data_dir, now.strftime("%Y-%m-%d-%H%M%S"))
+    util.generate_xlsx_file(xls_filename, df_sales_orders, column_list, "SALES ORDERS")
 
 
 def test():
